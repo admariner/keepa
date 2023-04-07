@@ -289,9 +289,8 @@ async def test_stock(api):
     live = product["liveOffersOrder"]
     if live is not None:
         for offer in product["offers"]:
-            if offer["offerId"] in live:
-                if "stockCSV" in offer:
-                    assert offer["stockCSV"][-1]
+            if offer["offerId"] in live and "stockCSV" in offer:
+                assert offer["stockCSV"][-1]
     else:
         warnings.warn(f"No live offers for {PRODUCT_ASIN}")
 

@@ -261,25 +261,29 @@ def test_productquery_days(api, max_days: int = 5):
 
     def convert(minutes):
         """Convert keepaminutes to time."""
-        times = set(
-            keepa_minutes_to_time(keepa_minute).date() for keepa_minute in minutes
-        )
+        times = {
+            keepa_minutes_to_time(keepa_minute).date()
+            for keepa_minute in minutes
+        }
         return list(times)
 
     # Converting each field's list of keepa minutes into flat list of unique days.
-    sales_ranks = convert(chain.from_iterable(product["salesRanks"].values()))[0::2]
+    sales_ranks = convert(chain.from_iterable(product["salesRanks"].values()))[::2]
     offers = convert(offer["lastSeen"] for offer in product["offers"])
-    buy_box_seller_id_history = convert(product["buyBoxSellerIdHistory"][0::2])
-    offers_csv = list(convert(offer["offerCSV"][0::3]) for offer in product["offers"])
-    df_dates = list(
+    buy_box_seller_id_history = convert(product["buyBoxSellerIdHistory"][::2])
+    offers_csv = [convert(offer["offerCSV"][::3]) for offer in product["offers"]]
+    df_dates = [
         list(df.axes[0])
         for df_name, df in product["data"].items()
         if "df_" in df_name and any(df)
-    )
-    df_dates = list(
-        list(datetime.date(year=ts.year, month=ts.month, day=ts.day) for ts in stamps)
+    ]
+    df_dates = [
+        [
+            datetime.date(year=ts.year, month=ts.month, day=ts.day)
+            for ts in stamps
+        ]
         for stamps in df_dates
-    )
+    ]
 
     # Check for out of range days.
     today = datetime.date.today()
@@ -362,9 +366,8 @@ def test_stock(api):
     live = product["liveOffersOrder"]
     if live is not None:
         for offer in product["offers"]:
-            if offer["offerId"] in live:
-                if "stockCSV" in offer:
-                    assert offer["stockCSV"][-1]
+            if offer["offerId"] in live and "stockCSV" in offer:
+                assert offer["stockCSV"][-1]
     else:
         warnings.warn(f"No live offers for {PRODUCT_ASIN}")
 

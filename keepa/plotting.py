@@ -70,7 +70,7 @@ def plot_product(
 
         elif "SALES" in key and "time" not in key:
             if product["data"][key].size > 1:
-                x = np.append(product["data"][key + "_time"], lstupdate)
+                x = np.append(product["data"][f"{key}_time"], lstupdate)
                 y = np.append(product["data"][key], product["data"][key][-1]).astype(
                     float
                 )
@@ -83,7 +83,7 @@ def plot_product(
                 saleslegend.append(key)
 
         elif "COUNT_" in key and "time" not in key:
-            x = np.append(product["data"][key + "_time"], lstupdate)
+            x = np.append(product["data"][f"{key}_time"], lstupdate)
             y = np.append(product["data"][key], product["data"][key][-1]).astype(float)
             replace_invalid(y)
 
@@ -94,7 +94,7 @@ def plot_product(
             offerlegend.append(key)
 
         elif "time" not in key:
-            x = np.append(product["data"][key + "_time"], lstupdate)
+            x = np.append(product["data"][f"{key}_time"], lstupdate)
             y = np.append(product["data"][key], product["data"][key][-1]).astype(float)
             replace_invalid(y, max_value=price_limit)
 
