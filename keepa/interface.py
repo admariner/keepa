@@ -151,7 +151,7 @@ def _parse_stats(stats, to_datetime):
                     if stat_value_item is not None:
                         stat_value_dict[key] = stat_value_item
 
-                if len(stat_value_dict) > 0:
+                if stat_value_dict:
                     stats_parsed[stat_key] = stat_value_dict
             else:
                 stats_parsed[stat_key] = stat_value
@@ -323,7 +323,7 @@ def parse_csv(csv, to_datetime=True, out_of_stock_as_nan=True):
 
             timeval = keepa_minutes_to_time(times, to_datetime)
 
-            product_data["%s_time" % key] = timeval
+            product_data[f"{key}_time"] = timeval
             product_data[key] = values
 
             # combine time and value into a data frame using time as index
@@ -334,7 +334,7 @@ def parse_csv(csv, to_datetime=True, out_of_stock_as_nan=True):
 
 def format_items(items):
     """Check if the input items are valid and formats them."""
-    if isinstance(items, list) or isinstance(items, np.ndarray):
+    if isinstance(items, (list, np.ndarray)):
         return np.unique(items)
     elif isinstance(items, str):
         return np.asarray([items])
@@ -425,9 +425,7 @@ class Keepa:
 
         # wait plus one second fudge factor
         timetorefil = timeatrefile - now + 1000
-        if timetorefil < 0:
-            timetorefil = 0
-
+        timetorefil = max(timetorefil, 0)
         # Account for negative tokens left
         if self.tokens_left < 0:
             timetorefil += (abs(self.tokens_left) / self.status["refillRate"]) * 60000
@@ -797,10 +795,7 @@ class Keepa:
         # product list
         products = []
 
-        pbar = None
-        if progress_bar:
-            pbar = tqdm(total=nitems)
-
+        pbar = tqdm(total=nitems) if progress_bar else None
         # Number of requests is dependent on the number of items and
         # request limit.  Use available tokens first
         idx = 0  # or number complete
@@ -808,9 +803,7 @@ class Keepa:
             nrequest = nitems - idx
 
             # cap request
-            if nrequest > REQUEST_LIMIT:
-                nrequest = REQUEST_LIMIT
-
+            nrequest = min(nrequest, REQUEST_LIMIT)
             # request from keepa and increment current position
             item_request = items[idx : idx + nrequest]  # noqa: E203
             response = self._product_query(
@@ -960,8 +953,7 @@ class Keepa:
 
         if kwargs.get("stats", None) and not raw_response:
             for product in response["products"]:
-                stats = product.get("stats", None)
-                if stats:
+                if stats := product.get("stats", None):
                     product["stats_parsed"] = _parse_stats(stats, to_datetime)
 
         return response
@@ -2537,15 +2529,13 @@ class Keepa:
             )
             status_code = str(raw.status_code)
             if status_code != "200":
-                if status_code in SCODES:
-                    if status_code == "429" and wait:
-                        print("Response from server: %s" % SCODES[status_code])
-                        self.wait_for_tokens()
-                        continue
-                    else:
-                        raise RuntimeError(SCODES[status_code])
-                else:
+                if status_code not in SCODES:
                     raise RuntimeError(f"REQUEST_FAILED: {status_code}")
+                if status_code != "429" or not wait:
+                    raise RuntimeError(SCODES[status_code])
+                print(f"Response from server: {SCODES[status_code]}")
+                self.wait_for_tokens()
+                continue
             break
 
         response = raw.json()
@@ -2553,16 +2543,13 @@ class Keepa:
         if "tokensConsumed" in response:
             log.debug("%d tokens consumed", response["tokensConsumed"])
 
-        if "error" in response:
-            if response["error"]:
-                raise Exception(response["error"]["message"])
+        if "error" in response and response["error"]:
+            raise Exception(response["error"]["message"])
 
         # always update tokens
         self.tokens_left = response["tokensLeft"]
 
-        if raw_response:
-            return raw
-        return response
+        return raw if raw_response else response
 
 
 class AsyncKeepa:
@@ -2646,9 +2633,7 @@ class AsyncKeepa:
 
         # wait plus one second fudge factor
         timetorefil = timeatrefile - now + 1000
-        if timetorefil < 0:
-            timetorefil = 0
-
+        timetorefil = max(timetorefil, 0)
         # Account for negative tokens left
         if self.tokens_left < 0:
             timetorefil += (abs(self.tokens_left) / self.status["refillRate"]) * 60000
@@ -2736,10 +2721,7 @@ class AsyncKeepa:
         # product list
         products = []
 
-        pbar = None
-        if progress_bar:
-            pbar = tqdm(total=nitems)
-
+        pbar = tqdm(total=nitems) if progress_bar else None
         # Number of requests is dependent on the number of items and
         # request limit.  Use available tokens first
         idx = 0  # or number complete
@@ -2747,9 +2729,7 @@ class AsyncKeepa:
             nrequest = nitems - idx
 
             # cap request
-            if nrequest > REQUEST_LIMIT:
-                nrequest = REQUEST_LIMIT
-
+            nrequest = min(nrequest, REQUEST_LIMIT)
             # request from keepa and increment current position
             item_request = items[idx : idx + nrequest]  # noqa: E203
             response = await self._product_query(
@@ -2838,8 +2818,7 @@ class AsyncKeepa:
 
         if kwargs.get("stats", None):
             for product in response["products"]:
-                stats = product.get("stats", None)
-                if stats:
+                if stats := product.get("stats", None):
                     product["stats_parsed"] = _parse_stats(stats, to_datetime)
 
         return response
@@ -2946,7 +2925,7 @@ class AsyncKeepa:
         # verify valid keys
         for key in product_parms:
             if key not in PRODUCT_REQUEST_KEYS:
-                raise RuntimeError('Invalid key "%s"' % key)
+                raise RuntimeError(f'Invalid key "{key}"')
 
             # verify json type
             key_type = PRODUCT_REQUEST_KEYS[key]
@@ -2989,26 +2968,23 @@ class AsyncKeepa:
         while True:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    f"https://api.keepa.com/{request_type}/?",
-                    params=payload,
-                    timeout=self._timeout,
-                ) as raw:
+                                f"https://api.keepa.com/{request_type}/?",
+                                params=payload,
+                                timeout=self._timeout,
+                            ) as raw:
                     status_code = str(raw.status)
                     if status_code != "200":
-                        if status_code in SCODES:
-                            if status_code == "429" and wait:
-                                await self.wait_for_tokens()
-                                continue
-                            else:
-                                raise Exception(SCODES[status_code])
-                        else:
+                        if status_code not in SCODES:
                             raise Exception("REQUEST_FAILED")
 
+                        if status_code != "429" or not wait:
+                            raise Exception(SCODES[status_code])
+                        await self.wait_for_tokens()
+                        continue
                     response = await raw.json()
 
-                    if "error" in response:
-                        if response["error"]:
-                            raise Exception(response["error"]["message"])
+                    if "error" in response and response["error"]:
+                        raise Exception(response["error"]["message"])
 
                     # always update tokens
                     self.tokens_left = response["tokensLeft"]
@@ -3059,9 +3035,7 @@ def keepa_minutes_to_time(minutes, to_datetime=True):
     dt = dt + KEEPA_ST_ORDINAL  # shift from ordinal
 
     # Convert to datetime if requested
-    if to_datetime:
-        return dt.astype(datetime.datetime)
-    return dt
+    return dt.astype(datetime.datetime) if to_datetime else dt
 
 
 def run_and_get(coro):
